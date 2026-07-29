@@ -1,0 +1,16 @@
+{
+  "name": "manager-accountability-sync",
+  "main": "sync-worker/index.ts",
+  "compatibility_date": "2026-07-29",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "manager-accountability-sync",
+      "database_id": "e346a53a-79cd-45d3-912a-ce91148eed66",
+      "migrations_dir": "sync-worker/migrations"
+    }
+  ]
+}
