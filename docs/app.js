@@ -761,7 +761,17 @@ async function hydratePhotos() {
 
 /* --------------------------------- wiring ------------------------------- */
 
+let viewWired = false;
+
+/**
+ * Attach the delegated handlers exactly once. render() only swaps innerHTML, so
+ * delegation on #view survives — re-binding per render would stack duplicate
+ * listeners and a single tap would toggle a checkbox twice, back to where it
+ * started.
+ */
 function wireView() {
+  if (viewWired) return;
+  viewWired = true;
   const view = $('#view');
 
   view.addEventListener('click', async (event) => {
