@@ -328,6 +328,9 @@ main {
   color: var(--text-soft);
 }
 
+/* `input:not([type])` matters: the initials and sign-off boxes are bare inputs,
+   and an [type='text'] selector alone silently skips them. */
+input:not([type]),
 input[type='text'],
 input[type='password'],
 input[type='date'],
