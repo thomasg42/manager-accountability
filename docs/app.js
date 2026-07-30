@@ -142,14 +142,14 @@ function isChief177() {
   return String(state.profile?.employeeNumber || '') === '177';
 }
 
-/** Full Settings / roster / deletes — Chief #177 or device admin PIN. */
+/** Full Settings (roster, messages, checklist, codes, data, deletes) — only profile #177. */
 function canManageApp() {
-  return isChief177() || cloud.isAdmin();
+  return isChief177();
 }
 
-/** Mirrors the original: profile flag OR admin scope reveals GM notes. */
+/** Admin notes on the shift screen — #177 or marked admin profiles. */
 function seesAdminNotes() {
-  return cloud.isAdmin() || Boolean(state.profile?.isAdmin) || isChief177();
+  return isChief177() || Boolean(state.profile?.isAdmin);
 }
 
 function finalShifts() {
@@ -683,12 +683,13 @@ function settingsView() {
   const managers = state.data.profiles.filter((row) => (row.role || 'manager') === 'manager');
   const accountants = state.data.profiles.filter((row) => row.role === 'accountant');
 
-  // Regular managers: profile only (edit own name). Chief #177 / device admin: full controls.
+  // Regular crew: profile name only. Roster, completion messages, checklist
+  // wording, codes, and data export are #177-only.
   if (!canManageApp()) {
     return `<div class="stack">
       <section class="card card-pad">
         <h2>Your profile</h2>
-        <p class="muted" style="margin-bottom:12px">You can update your name. Switch profile or log out when someone else needs the device.</p>
+        <p class="muted" style="margin-bottom:12px">Update your name here. Roster, messages, codes and deletes are managed by #177.</p>
         <label class="field"><span>First name</span><input data-act="edit-name" data-field="firstName" value="${esc(state.profile?.firstName || '')}" /></label>
         <label class="field"><span>Last name</span><input data-act="edit-name" data-field="lastName" value="${esc(state.profile?.lastName || '')}" /></label>
         <p class="tiny">Employee #${esc(state.profile?.employeeNumber || '—')} · ${esc(state.profile?.role || 'manager')}</p>
@@ -935,6 +936,7 @@ function wireView() {
         break;
 
       case 'toggle-role': {
+        if (!canManageApp()) break;
         const profile = state.data.profiles.find((row) => row.id === target.dataset.id);
         if (!profile) return;
         const updated = { ...profile, role: (profile.role || 'manager') === 'manager' ? 'accountant' : 'manager' };
@@ -943,6 +945,7 @@ function wireView() {
       }
 
       case 'toggle-admin': {
+        if (!canManageApp()) break;
         const profile = state.data.profiles.find((row) => row.id === target.dataset.id);
         if (!profile) return;
         await applyProfile({ ...profile, isAdmin: !profile.isAdmin });
@@ -950,10 +953,12 @@ function wireView() {
       }
 
       case 'delete-profile':
+        if (!canManageApp()) break;
         confirmDeleteProfile(target.dataset.id);
         break;
 
       case 'edit-tasks':
+        if (!canManageApp()) break;
         promptTaskWording(target.dataset.shift);
         break;
 
@@ -962,6 +967,7 @@ function wireView() {
         break;
 
       case 'rotate':
+        if (!canManageApp()) break;
         promptRotate();
         break;
 
@@ -977,6 +983,7 @@ function wireView() {
         break;
 
       case 'export-all':
+        if (!canManageApp()) break;
         download(
           `manager-accountability-backup-${today()}.json`,
           JSON.stringify({ exportedAt: new Date().toISOString(), ...state.data }, null, 2),
@@ -1027,6 +1034,7 @@ function wireView() {
       }
 
       case 'set-brand': {
+        if (!canManageApp()) break;
         await cloud.save('messages', { ...settings(), id: 'settings', brand: target.value });
         await refresh({ silent: true });
         applyBrand(target.value);
@@ -1036,6 +1044,7 @@ function wireView() {
       }
 
       case 'set-message': {
+        if (!canManageApp()) break;
         const shiftType = target.dataset.shift;
         await cloud.save('messages', { id: `message_${shiftType}`, shiftType, message: target.value });
         await refresh({ silent: true });
