@@ -66,6 +66,13 @@ export function dropAdmin() {
   if (storedScope() === 'admin') localStorage.setItem(LS.scope, 'staff');
 }
 
+/** Clears a dead session after credential rotation — token + profile + stuck outbox. */
+export function clearSession() {
+  signOut();
+  writeJson(LS.outbox, []);
+  setOnline(true);
+}
+
 async function request(path, { method = 'GET', body, token, allowAnonymous = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   const bearer = token ?? storedToken();
@@ -80,11 +87,39 @@ async function request(path, { method = 'GET', body, token, allowAnonymous = fal
 
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
+    // Stale token after a credential re-claim: drop the dead session so the lock
+    // screen comes back instead of an eternal offline banner with empty videos.
+    if (response.status === 401 && bearer && !allowAnonymous) {
+      clearSession();
+    }
     const error = new Error(detail.error || `${method} ${path} failed (${response.status})`);
     error.status = response.status;
     throw error;
   }
   return response.status === 204 ? null : response.json();
+}
+
+/**
+ * Confirms the stored code still matches the server. Returns the live scope, or
+ * null when the browser has a dead token (e.g. codes were rotated/re-claimed).
+ */
+export async function revalidateSession() {
+  const code = storedToken();
+  if (!code) return null;
+  try {
+    const result = await request('/api/auth/verify', {
+      method: 'POST',
+      body: { code },
+      token: code,
+    });
+    localStorage.setItem(LS.scope, result.scope);
+    setOnline(true);
+    return result.scope;
+  } catch (error) {
+    if (error.status === 401) clearSession();
+    else setOnline(false);
+    return null;
+  }
 }
 
 export async function fetchStatus() {

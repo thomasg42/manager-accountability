@@ -197,6 +197,12 @@ async function boot() {
 
   if (!status.claimed) return renderSetup();
   if (!cloud.storedToken()) return renderLock({});
+
+  // Credential re-claims leave the old token in localStorage while the UI still
+  // paints as unlocked. Re-check before loading so a dead token forces unlock
+  // instead of a stuck offline banner with missing video links.
+  const scope = await cloud.revalidateSession();
+  if (!scope) return renderLock({});
   return startApp({});
 }
 

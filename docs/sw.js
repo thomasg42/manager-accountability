@@ -1,5 +1,5 @@
 /* Bump CACHE on every deploy — a stale shell is the classic PWA support call. */
-const CACHE = 'manager-accountability-v4-videos-settings';
+const CACHE = 'manager-accountability-v5-session-revalidate';
 
 const SHELL = [
   './',
