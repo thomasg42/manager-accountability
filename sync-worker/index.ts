@@ -22,10 +22,12 @@ type Dict = Record<string, unknown>;
 const ALLOWED_ORIGINS = ['https://thomasg42.github.io'];
 const LOCALHOST = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
-/** Collections a staff-scope credential may write. */
-const STAFF_WRITABLE = new Set(['profiles', 'shifts', 'notes', 'audits']);
+/** Collections a staff-scope credential may write. Videos are staff-writable so
+ *  profile #177 can update training links without the device admin PIN; the UI
+ *  still only shows the URL fields to #177. */
+const STAFF_WRITABLE = new Set(['profiles', 'shifts', 'notes', 'audits', 'videos']);
 /** Collections only the admin PIN may write. */
-const ADMIN_WRITABLE = new Set(['messages', 'videos']);
+const ADMIN_WRITABLE = new Set(['messages']);
 const COLLECTIONS = new Set([...STAFF_WRITABLE, ...ADMIN_WRITABLE]);
 
 /** Staff access code may be short (employee number). Admin PIN stays longer. */

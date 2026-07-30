@@ -23,6 +23,7 @@ import * as cloud from './cloud.js';
 
 const state = {
   route: 'shift',
+  shiftTab: 'shift',
   settingsTab: 'profile',
   profile: null,
   data: { profiles: [], shifts: [], notes: [], audits: [], messages: [], videos: [] },
@@ -136,9 +137,19 @@ function isSuperAdmin() {
   return cloud.isAdmin() || Boolean(state.profile?.isAdmin);
 }
 
+/** Profile #177 is the GM seat — only this profile edits training video URLs. */
+function isChief177() {
+  return String(state.profile?.employeeNumber || '') === '177';
+}
+
+/** Full Settings / roster / deletes — Chief #177 or device admin PIN. */
+function canManageApp() {
+  return isChief177() || cloud.isAdmin();
+}
+
 /** Mirrors the original: profile flag OR admin scope reveals GM notes. */
 function seesAdminNotes() {
-  return cloud.isAdmin() || Boolean(state.profile?.isAdmin);
+  return cloud.isAdmin() || Boolean(state.profile?.isAdmin) || isChief177();
 }
 
 function finalShifts() {
@@ -450,8 +461,17 @@ function profileGateView() {
 /* -------------------------------- shift view ----------------------------- */
 
 function shiftView() {
+  const tabs = `<div class="settings-tabs" role="tablist" style="margin-bottom:10px">
+    <button type="button" role="tab" data-act="shift-tab" data-tab="shift" aria-selected="${state.shiftTab !== 'videos'}">Shift</button>
+    <button type="button" role="tab" data-act="shift-tab" data-tab="videos" aria-selected="${state.shiftTab === 'videos'}">Videos</button>
+  </div>`;
+
+  if (state.shiftTab === 'videos') {
+    return `<div class="stack">${tabs}${videosView()}</div>`;
+  }
+
   const draft = state.draft;
-  if (!draft) return '<div class="stack"><section class="card card-pad"><p class="muted">Loading shift…</p></section></div>';
+  if (!draft) return `<div class="stack">${tabs}<section class="card card-pad"><p class="muted">Loading shift…</p></section></div>`;
 
   const done = draft.tasks.filter((task) => task.completed).length;
   const total = draft.tasks.length;
@@ -459,6 +479,7 @@ function shiftView() {
   const urgency = URGENCY.find((option) => option.value === draft.urgency) || URGENCY[2];
 
   return `<div class="stack">
+    ${tabs}
     ${seesAdminNotes() ? adminNotesCard() : ''}
     ${nonNegotiablesCard()}
 
@@ -541,9 +562,9 @@ function adminNotesCard() {
             <p style="margin:0;font-size:13px;line-height:1.5">${esc(note.comments)}</p>
             <p class="tiny" style="margin-top:3px">${esc(note.submittedByName || 'unknown')} · ${esc(note.date || '')} · urgency ${esc(note.urgency || '—')}</p>
           </div>
-          ${isSuperAdmin() ? `<button class="btn danger sm" data-act="archive-note" data-id="${esc(note.id)}">Clear</button>` : ''}
+          ${canManageApp() ? `<button class="btn danger sm" data-act="archive-note" data-id="${esc(note.id)}">Clear</button>` : ''}
         </div>`).join('') : '<p class="muted" style="font-style:italic">No admin notes at this time.</p>'}
-      ${isSuperAdmin() ? '<button class="btn ghost block sm" style="margin-top:8px" data-act="add-note">+ Add note</button>' : ''}
+      ${canManageApp() ? '<button class="btn ghost block sm" style="margin-top:8px" data-act="add-note">+ Add note</button>' : ''}
     </div>` : ''}
   </section>`;
 }
@@ -644,12 +665,12 @@ function videosView() {
         const embed = youTubeEmbed(url);
         return `<div style="margin-top:12px">
           <p class="tiny" style="text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:5px">Video ${slot + 1}</p>
-          ${cloud.isAdmin() ? `<input type="url" data-act="set-video" data-section="${esc(section.key)}" data-field="${field}" value="${esc(url)}" placeholder="Paste YouTube URL…" style="margin-bottom:8px" />` : ''}
+          ${isChief177() ? `<input type="url" data-act="set-video" data-section="${esc(section.key)}" data-field="${field}" value="${esc(url)}" placeholder="Paste YouTube URL…" style="margin-bottom:8px" />` : ''}
           ${embed
             ? `<div class="embed" style="margin-top:0"><iframe src="${esc(embed)}" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" title="${esc(section.title)} video ${slot + 1}"></iframe></div>`
             : url
               ? `<a class="link-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open link</a>`
-              : `<div class="embed" style="margin-top:0;display:grid;place-items:center;background:var(--surface-alt)"><p class="tiny">No video yet${cloud.isAdmin() ? '' : ' — ask the GM to add it'}</p></div>`}
+              : `<div class="embed" style="margin-top:0;display:grid;place-items:center;background:var(--surface-alt)"><p class="tiny">No video yet${isChief177() ? '' : ' — ask #177 to add it'}</p></div>`}
         </div>`;
       }).join('')}
     </section>`;
@@ -661,29 +682,33 @@ function videosView() {
 function settingsView() {
   const managers = state.data.profiles.filter((row) => (row.role || 'manager') === 'manager');
   const accountants = state.data.profiles.filter((row) => row.role === 'accountant');
-  const tab = state.settingsTab === 'videos' ? 'videos' : 'profile';
 
-  const tabs = `<div class="settings-tabs" role="tablist">
-    <button type="button" role="tab" data-act="settings-tab" data-tab="profile" aria-selected="${tab === 'profile'}">Profile</button>
-    <button type="button" role="tab" data-act="settings-tab" data-tab="videos" aria-selected="${tab === 'videos'}">Videos</button>
-  </div>`;
-
-  if (tab === 'videos') {
-    return `<div class="stack">${tabs}<div class="stack">${videosView()}</div></div>`;
+  // Regular managers: profile only (edit own name). Chief #177 / device admin: full controls.
+  if (!canManageApp()) {
+    return `<div class="stack">
+      <section class="card card-pad">
+        <h2>Your profile</h2>
+        <p class="muted" style="margin-bottom:12px">You can update your name. Switch profile or log out when someone else needs the device.</p>
+        <label class="field"><span>First name</span><input data-act="edit-name" data-field="firstName" value="${esc(state.profile?.firstName || '')}" /></label>
+        <label class="field"><span>Last name</span><input data-act="edit-name" data-field="lastName" value="${esc(state.profile?.lastName || '')}" /></label>
+        <p class="tiny">Employee #${esc(state.profile?.employeeNumber || '—')} · ${esc(state.profile?.role || 'manager')}</p>
+        <button class="btn ghost block sm" style="margin-top:12px" data-act="switch-profile">Switch profile</button>
+      </section>
+      <section class="card card-pad">
+        <button class="btn danger block sm" data-act="sign-out">Log Out</button>
+      </section>
+    </div>`;
   }
 
   return `<div class="stack">
-    ${tabs}
     <section class="card card-pad">
       <h2>Your profile</h2>
-      <div class="kv">
-        <div><b>${esc(fullName(state.profile))}</b><p class="tiny">#${esc(state.profile?.employeeNumber || '—')} · ${esc(state.profile?.role || 'manager')}${state.profile?.isAdmin ? ' · admin' : ''}</p></div>
-        <button class="btn ghost sm" data-act="switch-profile">Switch</button>
-      </div>
-      <button class="btn danger block sm" style="margin-top:12px" data-act="delete-own-profile">Delete Profile</button>
+      <label class="field"><span>First name</span><input data-act="edit-name" data-field="firstName" value="${esc(state.profile?.firstName || '')}" /></label>
+      <label class="field"><span>Last name</span><input data-act="edit-name" data-field="lastName" value="${esc(state.profile?.lastName || '')}" /></label>
+      <p class="tiny">#${esc(state.profile?.employeeNumber || '—')} · ${esc(state.profile?.role || 'manager')}${state.profile?.isAdmin || isChief177() ? ' · admin' : ''}</p>
+      <button class="btn ghost block sm" style="margin-top:12px" data-act="switch-profile">Switch profile</button>
     </section>
 
-    ${isSuperAdmin() ? `
     <section class="card card-pad">
       <h2>Branding</h2>
       <label class="field">
@@ -722,19 +747,14 @@ function settingsView() {
     <section class="card card-pad">
       <h2>Codes</h2>
       <button class="btn ghost block sm" data-act="rotate">Rotate access code / admin PIN</button>
-      <button class="btn ghost block sm" style="margin-top:8px" data-act="drop-admin">Leave admin mode on this device</button>
+      ${cloud.isAdmin() ? '<button class="btn ghost block sm" style="margin-top:8px" data-act="drop-admin">Leave admin mode on this device</button>' : ''}
+      ${!cloud.isAdmin() ? '<button class="btn ghost block sm" style="margin-top:8px" data-act="elevate">Enter admin PIN on this device</button>' : ''}
     </section>
 
     <section class="card card-pad">
       <h2>Data</h2>
       <button class="btn ghost block sm" data-act="export-all">Download JSON backup</button>
     </section>
-    ` : `
-    <section class="card card-pad">
-      <h2>Admin locked</h2>
-      <p class="muted">Enter the admin PIN to manage the roster, GM notes, video links and codes. Profile #177 (admin) also unlocks this.</p>
-      <button class="btn block" style="margin-top:12px" data-act="elevate">Enter admin PIN</button>
-    </section>`}
 
     <section class="card card-pad">
       <button class="btn danger block sm" data-act="sign-out">Log Out</button>
@@ -748,7 +768,7 @@ function profileRow(profile) {
     <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
       <button class="btn ghost sm" data-act="toggle-role" data-id="${esc(profile.id)}">${(profile.role || 'manager') === 'manager' ? 'Make accountant' : 'Make manager'}</button>
       <button class="btn ghost sm" data-act="toggle-admin" data-id="${esc(profile.id)}">${profile.isAdmin ? 'Remove admin' : 'Make admin'}</button>
-      <button class="btn danger sm" data-act="delete-profile" data-id="${esc(profile.id)}">Delete</button>
+      ${canManageApp() ? `<button class="btn danger sm" data-act="delete-profile" data-id="${esc(profile.id)}">Delete</button>` : ''}
     </div>
   </div>`;
 }
@@ -818,8 +838,13 @@ function wireView() {
         render();
         break;
 
+      case 'shift-tab':
+        state.shiftTab = target.dataset.tab === 'videos' ? 'videos' : 'shift';
+        render();
+        break;
+
       case 'delete-own-profile': {
-        if (!state.profile) break;
+        if (!canManageApp() || !state.profile) break;
         if (!window.confirm(`Delete profile for ${fullName(state.profile)}?`)) break;
         const id = state.profile.id;
         await cloud.remove('profiles', id);
@@ -1019,12 +1044,29 @@ function wireView() {
       }
 
       case 'set-video': {
+        if (!isChief177()) {
+          toast('Only profile #177 can change video links');
+          break;
+        }
         const key = target.dataset.section;
         const existing = state.data.videos.find((row) => row.id === key) || { id: key, section: key };
         await cloud.save('videos', { ...existing, [target.dataset.field]: target.value.trim() });
         await refresh({ silent: true });
         render();
         toast('Video link saved');
+        break;
+      }
+
+      case 'edit-name': {
+        if (!state.profile) break;
+        const field = target.dataset.field;
+        if (field !== 'firstName' && field !== 'lastName') break;
+        const next = { ...state.profile, [field]: target.value.trim() };
+        const saved = await cloud.save('profiles', next);
+        state.profile = saved;
+        cloud.setActiveProfile(saved);
+        state.data.profiles = state.data.profiles.map((row) => (row.id === saved.id ? saved : row));
+        toast('Name saved');
         break;
       }
 
