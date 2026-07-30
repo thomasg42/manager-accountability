@@ -107,8 +107,8 @@ export const URGENCY = [
 ];
 
 export const DEFAULT_COMPLETION_MESSAGES = {
-  morning: 'Good work this morning.',
-  night: 'Good job tonight.',
+  morning: 'Good work this morning!:)',
+  night: 'Good job tonight. Keep it up!',
 };
 
 export const SHIFT_BANNER = '🔴 TOP PRIORITY: Rollout videos must be completed by all crew members';

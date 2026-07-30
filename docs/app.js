@@ -23,6 +23,7 @@ import * as cloud from './cloud.js';
 
 const state = {
   route: 'shift',
+  settingsTab: 'profile',
   profile: null,
   data: { profiles: [], shifts: [], notes: [], audits: [], messages: [], videos: [] },
   draft: null,
@@ -131,7 +132,8 @@ function completionMessage(shiftType) {
 }
 
 function isSuperAdmin() {
-  return cloud.isAdmin();
+  // Device admin PIN OR the #177-style profile admin flag from Base44.
+  return cloud.isAdmin() || Boolean(state.profile?.isAdmin);
 }
 
 /** Mirrors the original: profile flag OR admin scope reveals GM notes. */
@@ -280,7 +282,7 @@ function renderSetup() {
       <form id="setup-form">
         <label class="field">
           <span>Manager access code — every manager gets this</span>
-          <input name="accessCode" type="text" autocomplete="off" required minlength="4" />
+          <input name="accessCode" type="text" autocomplete="off" required minlength="3" />
         </label>
         <label class="field">
           <span>Admin PIN — GM only, unlocks roster, notes and videos</span>
@@ -408,7 +410,6 @@ function render() {
   const view = $('#view');
   if (!state.profile) view.innerHTML = profileGateView();
   else if (state.route === 'audit') view.innerHTML = auditView();
-  else if (state.route === 'videos') view.innerHTML = videosView();
   else if (state.route === 'settings') view.innerHTML = settingsView();
   else view.innerHTML = shiftView();
 
@@ -627,32 +628,26 @@ function auditView() {
 /* ------------------------------- videos view ----------------------------- */
 
 function videosView() {
-  return `<div class="stack">
-    ${VIDEO_SECTIONS.map((section) => {
-      const record = state.data.videos.find((row) => row.id === section.key) || {};
-      return `<section class="card card-pad">
-        <h2>${esc(section.title)}</h2>
-        ${Array.from({ length: section.slots }, (unused, slot) => {
-          const field = `video${slot + 1}Url`;
-          const url = record[field] || '';
-          const embed = youTubeEmbed(url);
-          return `<div style="margin-top:12px">
-            <p class="tiny" style="text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:5px">Video ${slot + 1}</p>
-            ${isSuperAdmin() ? `<input type="url" data-act="set-video" data-section="${esc(section.key)}" data-field="${field}" value="${esc(url)}" placeholder="Paste YouTube URL…" style="margin-bottom:8px" />` : ''}
-            ${embed
-              ? `<div class="embed" style="margin-top:0"><iframe src="${esc(embed)}" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" title="${esc(section.title)} video ${slot + 1}"></iframe></div>`
-              : url
-                ? `<a class="link-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open link</a>`
-                : `<div class="embed" style="margin-top:0;display:grid;place-items:center;background:var(--surface-alt)"><p class="tiny">No video yet${isSuperAdmin() ? '' : ' — ask the GM to add it'}</p></div>`}
-          </div>`;
-        }).join('')}
-      </section>`;
-    }).join('')}
-    <div class="warn-box">
-      <b>Links did not come across from Base44</b>
-      <span class="tiny">The old app stored these URLs in its own database rather than in exported code, so they start empty. Copy them out of the live Base44 app before cancelling it.</span>
-    </div>
-  </div>`;
+  return VIDEO_SECTIONS.map((section) => {
+    const record = state.data.videos.find((row) => row.id === section.key) || {};
+    return `<section class="card card-pad">
+      <h2>▶ ${esc(section.title)}</h2>
+      ${Array.from({ length: section.slots }, (unused, slot) => {
+        const field = `video${slot + 1}Url`;
+        const url = record[field] || '';
+        const embed = youTubeEmbed(url);
+        return `<div style="margin-top:12px">
+          <p class="tiny" style="text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:5px">Video ${slot + 1}</p>
+          ${cloud.isAdmin() ? `<input type="url" data-act="set-video" data-section="${esc(section.key)}" data-field="${field}" value="${esc(url)}" placeholder="Paste YouTube URL…" style="margin-bottom:8px" />` : ''}
+          ${embed
+            ? `<div class="embed" style="margin-top:0"><iframe src="${esc(embed)}" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" title="${esc(section.title)} video ${slot + 1}"></iframe></div>`
+            : url
+              ? `<a class="link-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open link</a>`
+              : `<div class="embed" style="margin-top:0;display:grid;place-items:center;background:var(--surface-alt)"><p class="tiny">No video yet${cloud.isAdmin() ? '' : ' — ask the GM to add it'}</p></div>`}
+        </div>`;
+      }).join('')}
+    </section>`;
+  }).join('');
 }
 
 /* ------------------------------ settings view ---------------------------- */
@@ -660,14 +655,26 @@ function videosView() {
 function settingsView() {
   const managers = state.data.profiles.filter((row) => (row.role || 'manager') === 'manager');
   const accountants = state.data.profiles.filter((row) => row.role === 'accountant');
+  const tab = state.settingsTab === 'videos' ? 'videos' : 'profile';
+
+  const tabs = `<div class="settings-tabs" role="tablist">
+    <button type="button" role="tab" data-act="settings-tab" data-tab="profile" aria-selected="${tab === 'profile'}">Profile</button>
+    <button type="button" role="tab" data-act="settings-tab" data-tab="videos" aria-selected="${tab === 'videos'}">Videos</button>
+  </div>`;
+
+  if (tab === 'videos') {
+    return `<div class="stack">${tabs}<div class="stack">${videosView()}</div></div>`;
+  }
 
   return `<div class="stack">
+    ${tabs}
     <section class="card card-pad">
       <h2>Your profile</h2>
       <div class="kv">
         <div><b>${esc(fullName(state.profile))}</b><p class="tiny">#${esc(state.profile?.employeeNumber || '—')} · ${esc(state.profile?.role || 'manager')}${state.profile?.isAdmin ? ' · admin' : ''}</p></div>
         <button class="btn ghost sm" data-act="switch-profile">Switch</button>
       </div>
+      <button class="btn danger block sm" style="margin-top:12px" data-act="delete-own-profile">Delete Profile</button>
     </section>
 
     ${isSuperAdmin() ? `
@@ -693,8 +700,8 @@ function settingsView() {
     <section class="card card-pad">
       <h2>Completion messages</h2>
       <p class="muted" style="margin-bottom:12px">Shown to the manager right after they submit.</p>
-      <label class="field"><span>After a morning shift</span><input data-act="set-message" data-shift="morning" value="${esc(completionMessage('morning'))}" /></label>
-      <label class="field"><span>After a night shift</span><input data-act="set-message" data-shift="night" value="${esc(completionMessage('night'))}" /></label>
+      <label class="field"><span>Morning Message</span><input data-act="set-message" data-shift="morning" value="${esc(completionMessage('morning'))}" /></label>
+      <label class="field"><span>Night Message</span><input data-act="set-message" data-shift="night" value="${esc(completionMessage('night'))}" /></label>
     </section>
 
     <section class="card card-pad">
@@ -719,12 +726,12 @@ function settingsView() {
     ` : `
     <section class="card card-pad">
       <h2>Admin locked</h2>
-      <p class="muted">Enter the admin PIN to manage the roster, GM notes, videos and codes.</p>
+      <p class="muted">Enter the admin PIN to manage the roster, GM notes, video links and codes. Profile #177 (admin) also unlocks this.</p>
       <button class="btn block" style="margin-top:12px" data-act="elevate">Enter admin PIN</button>
     </section>`}
 
     <section class="card card-pad">
-      <button class="btn danger block sm" data-act="sign-out">Sign out of this device</button>
+      <button class="btn danger block sm" data-act="sign-out">Log Out</button>
     </section>
   </div>`;
 }
@@ -799,6 +806,24 @@ function wireView() {
         cloud.setActiveProfile(null);
         render();
         break;
+
+      case 'settings-tab':
+        state.settingsTab = target.dataset.tab === 'videos' ? 'videos' : 'profile';
+        render();
+        break;
+
+      case 'delete-own-profile': {
+        if (!state.profile) break;
+        if (!window.confirm(`Delete profile for ${fullName(state.profile)}?`)) break;
+        const id = state.profile.id;
+        await cloud.remove('profiles', id);
+        state.data.profiles = state.data.profiles.filter((row) => row.id !== id);
+        state.profile = null;
+        cloud.setActiveProfile(null);
+        toast('Profile deleted');
+        render();
+        break;
+      }
 
       case 'toggle-nonneg':
         state.nonNegOpen = !state.nonNegOpen;

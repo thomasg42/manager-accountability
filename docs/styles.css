@@ -808,6 +808,33 @@ textarea {
   color: var(--accent);
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 0;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 14px 14px 0 0;
+  overflow: hidden;
+}
+
+.settings-tabs button {
+  flex: 1;
+  padding: 12px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.settings-tabs button[aria-selected='true'] {
+  color: var(--accent-dark, var(--accent));
+  border-bottom-color: var(--accent);
+}
+
 /* -------------------------------- lists ---------------------------------- */
 
 .list-row {
